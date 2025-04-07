@@ -1,0 +1,72 @@
+-- dev_club_a 스키마가 존재하지 않는 경우 생성
+CREATE SCHEMA IF NOT EXISTS dev_club_a;
+
+-- login_type ENUM 타입 생성 (dev_club_a 스키마 아래)
+CREATE TYPE dev_club_a.login_type_enum AS ENUM ('email', 'google', 'facebook', 'apple', 'kakao');
+
+-- service_type ENUM 타입 생성 (dev_club_a 스키마 아래)
+CREATE TYPE dev_club_a.service_type_enum AS ENUM ('tenifo', 'bedipo');
+
+-- account 테이블 생성 (dev_club_a 스키마 아래, ENUM 타입 적용)
+CREATE TABLE dev_club_a.account (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(40) NOT NULL,
+    login_type dev_club_a.login_type_enum NOT NULL,
+    service_type dev_club_a.service_type_enum NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- user 테이블 생성 (dev_club_a 스키마 아래)
+CREATE TABLE dev_club_a."user" (
+    id SERIAL PRIMARY KEY,
+    account_id INT NOT NULL UNIQUE,
+    email VARCHAR(40) NOT NULL,
+    name VARCHAR(10),
+    image_url TEXT,
+    birth_date DATE,
+    gender INT CHECK (gender IN (1, 2)),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES dev_club_a.account(id) ON DELETE CASCADE
+);
+
+
+CREATE TABLE dev_club_a."user_extends_info" (
+    user_id INT NOT NULL UNIQUE,
+    staredAt DATE,
+    hands INT,
+    ntr INT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES dev_club_a.user(id) ON DELETE CASCADE
+);
+
+
+-- Account Trigger
+-- account 테이블에 데이터가 추가될 때 자동으로 user 테이블에 데이터를 추가하는 트리거 함수 (dev_club_a 스키마 아래)
+CREATE OR REPLACE FUNCTION dev_club_a.create_user_on_account_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO dev_club_a."user" (account_id, email)
+    VALUES (NEW.id, NEW.email);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- account 테이블에 INSERT 이벤트가 발생할 때 트리거 함수 실행 (dev_club_a 스키마 아래)
+CREATE TRIGGER on_account_insert
+AFTER INSERT ON dev_club_a.account
+FOR EACH ROW
+EXECUTE FUNCTION dev_club_a.create_user_on_account_insert();
+
+-- refresh_tokens 테이블
+CREATE TABLE IF NOT EXISTS dev_club_a.refresh_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token VARCHAR(500) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- refresh_tokens 테이블에 인덱스 추가 (검색 성능 향상)
+CREATE INDEX idx_refresh_tokens_user_id ON dev_club_a.refresh_tokens (user_id);
+CREATE INDEX idx_refresh_tokens_token ON dev_club_a.refresh_tokens (refresh_token);
